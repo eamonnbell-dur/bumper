@@ -8,15 +8,53 @@
         canvas {
             border: 1px solid black;
         }
+
+        #contextMenu {
+        display: none;
+        position: absolute;
+        background: white;
+        border: 1px solid black;
+        z-index: 1000;
+        padding: 10px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        border-radius: 5px;
+    }
+
+    #searchInput {
+        width: 100%;
+        padding: 5px;
+        margin-bottom: 10px;
+        box-sizing: border-box;
+        border: 1px solid #ccc;
+        border-radius: 3px;
+    }
+
+    #dropdown {
+        width: 100%;
+        padding: 5px;
+        box-sizing: border-box;
+        border: 1px solid #ccc;
+        border-radius: 3px;
+    }
     </style>
 </head>
 <body>
     <div>
-        <canvas id="packingCanvas" width="800" height="600"></canvas>
+        <canvas id="packingCanvas" width="640" height="640"></canvas>
     </div>
-    <script src="app.js"></script>
+    <script type="module" src="app.js"></script>
     <button id="saveButton">Save Canvas</button>
     <button id="refreshButton">Random Placement</button>
     <button id="homeButton">Draw New Set</button>
+
+
+    <div id="contextMenu" style="display: none; position: absolute; background: white; border: 1px solid black; z-index: 1000;">
+        <input type="text" id="searchInput" placeholder="Search...">
+        <select id="dropdown" size="3">
+            <option value="big-small">big-small</option>
+            <option value="dark-bright">dark-bright</option>
+            <option value="kiki-bouba">kiki-bouba</option>
+        </select>
+    </div>
 </body>
 </html>

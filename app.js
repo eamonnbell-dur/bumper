@@ -1,3 +1,5 @@
+import {computeConvexHull, hullsIntersect, getImageData}  from './utils.js'
+
 const canvas = document.getElementById('packingCanvas');
 const ctx = canvas.getContext('2d');
 
@@ -8,6 +10,7 @@ let dragging = false;
 let dragIndex = -1;
 let offsetX, offsetY;
 let currentImageIndex = 0;
+let selectedItem = null; // Global variable to store the selected item
 
 function getRandomSlice(arr, n) {
     const result = [];
@@ -65,7 +68,7 @@ function fetchImagesFromJSON() {
     fetch('image_list.json')
         .then(response => response.json())
         .then(images => {
-            const imagePaths = getRandomSlice(images, 10);
+            const imagePaths = getRandomSlice(images, 20);
             updateURLWithImages(imagePaths);
             loadImages(imagePaths);
         })
@@ -82,25 +85,58 @@ function updateURLWithImages(imagePaths) {
 
 function packImages() {
     loadedImages.forEach(img => {
-        let placed = false;
-        while (!placed) {
-            const x = Math.random() * (canvas.width - img.width);
-            const y = Math.random() * (canvas.height - img.height);
-            const rotation = Math.random() * 360; // Random rotation
-            positions.push({ img, x, y, rotation });
-            placed = true;
-        }
+        const imageData = getImageData(img);
+        const hull = computeConvexHull(imageData);
+        positions.push({ img, x: Math.random() * (canvas.width - img.width), y: Math.random() * (canvas.height - img.height), rotation: 0, hull });
     });
+
+    simulatedAnnealing(positions);
     renderImages(positions);
 }
 
-function getImageData(img) {
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = img.width;
-    tempCanvas.height = img.height;
-    const tempCtx = tempCanvas.getContext('2d');
-    tempCtx.drawImage(img, 0, 0);
-    return tempCtx.getImageData(0, 0, img.width, img.height);
+function simulatedAnnealing(positions) {
+    let temperature = 1000;
+    const coolingRate = 0.05;
+    let currentEnergy = calculateEnergy(positions);
+
+    while (temperature > 1) {
+        const newPositions = generateNeighbor(positions);
+        const newEnergy = calculateEnergy(newPositions);
+
+        if (acceptanceProbability(currentEnergy, newEnergy, temperature) > Math.random()) {
+            positions = newPositions;
+            currentEnergy = newEnergy;
+        }
+
+        temperature *= 1 - coolingRate;
+    }
+}
+
+function calculateEnergy(positions) {
+    let energy = 0;
+    for (let i = 0; i < positions.length; i++) {
+        for (let j = i + 1; j < positions.length; j++) {
+            if (hullsIntersect(positions[i].hull, positions[j].hull)) {
+                energy += 1;
+            }
+        }
+    }
+    return energy;
+}
+
+function generateNeighbor(positions) {
+    const newPositions = positions.map(pos => ({ ...pos }));
+    const index = Math.floor(Math.random() * newPositions.length);
+    newPositions[index].x += (Math.random() - 0.5) * 20;
+    newPositions[index].y += (Math.random() - 0.5) * 20;
+    return newPositions;
+}
+
+function acceptanceProbability(currentEnergy, newEnergy, temperature) {
+    if (newEnergy < currentEnergy) {
+        return 1.0;
+    }
+    return Math.exp((currentEnergy - newEnergy) / temperature);
 }
 
 function renderImages(positions) {
@@ -142,7 +178,7 @@ canvas.addEventListener('mousemove', (e) => {
         positions[dragIndex].x = mouseX - offsetX;
         positions[dragIndex].y = mouseY - offsetY;
         renderImages(positions);
-    } 
+    }
 });
 
 canvas.addEventListener('mouseup', () => {
@@ -168,13 +204,13 @@ canvas.addEventListener('wheel', (e) => {
     }
 });
 
+
 function updateURLWithCurrentImage() {
     const url = new URL(window.location);
     const imagePaths = loadedImages.map(img => img.src);
     url.searchParams.set('images', imagePaths.join(','));
     window.history.replaceState({}, '', url);
 }
-
 document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('saveButton').addEventListener('click', () => {
         const link = document.createElement('a');
@@ -190,7 +226,44 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('homeButton').addEventListener('click', () => {
         window.location.href = '/';
     });
+
+    document.addEventListener('click', (e) => {
+        const contextMenu = document.getElementById('contextMenu');
+        if (e.target !== contextMenu && !contextMenu.contains(e.target)) {
+            contextMenu.style.display = 'none';
+        }
+    });
+
+    document.getElementById('dropdown').addEventListener('change', (e) => {
+        selectedItem = e.target.value;
+        console.log(`Selected item: ${selectedItem}`);
+    });
+
+    document.getElementById('searchInput').addEventListener('input', (e) => {
+        const filter = e.target.value.toLowerCase();
+        const options = document.getElementById('dropdown').options;
+        for (let i = 0; i < options.length; i++) {
+            const option = options[i];
+            if (option.text.toLowerCase().includes(filter)) {
+                option.style.display = '';
+            } else {
+                option.style.display = 'none';
+            }
+        }
+    });
 });
+
+canvas.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    showContextMenu(e.clientX, e.clientY);
+});
+
+function showContextMenu(x, y) {
+    const contextMenu = document.getElementById('contextMenu');
+    contextMenu.style.left = `${x}px`;
+    contextMenu.style.top = `${y}px`;
+    contextMenu.style.display = 'block';
+}
 
 // Main logic to determine image paths
 const imagePaths = getImagePathsFromURL();
