@@ -30,6 +30,19 @@ export function computeConvexHull(imageData) {
     return hull;
 }
 
+export function computeConvexHullArea(hull) {
+    let area = 0;
+    const n = hull.length;
+
+    for (let i = 0; i < n; i++) {
+        const j = (i + 1) % n;
+        area += hull[i].x * hull[j].y;
+        area -= hull[j].x * hull[i].y;
+    }
+
+    return Math.abs(area) / 2;
+}
+
 export function getImageData(img) {
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = img.width;

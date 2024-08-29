@@ -1,4 +1,4 @@
-import {computeConvexHull, hullsIntersect, getImageData}  from './utils.js'
+import {computeConvexHull, computeConvexHullArea, hullsIntersect, getImageData}  from './utils.js'
 
 const canvas = document.getElementById('packingCanvas');
 const ctx = canvas.getContext('2d');
@@ -97,11 +97,17 @@ function packImages() {
     });
 
     currentEnergy = calculateEnergy(positions);
-    animateAnnealing();
+    startAnnealing();
+    startRendering();
 }
 
-function animateAnnealing() {
-    if (temperature > 1) {
+function startAnnealing() {
+    const annealingInterval = setInterval(() => {
+        if (temperature <= 1) {
+            clearInterval(annealingInterval);
+            return;
+        }
+
         const newPositions = generateNeighbor(positions);
         const newEnergy = calculateEnergy(newPositions);
 
@@ -112,18 +118,18 @@ function animateAnnealing() {
 
         temperature *= 1 - coolingRate;
         iteration++;
+    }, 0); // Adjust the interval time as needed
+}
 
+function startRendering() {
+    function renderLoop() {
         if (iteration % redrawInterval === 0) {
             renderImages(positions);
             renderHulls(positions);
         }
-
-        requestAnimationFrame(animateAnnealing);
-    } else {
-        // Final render after annealing is complete
-        renderImages(positions);
-        renderHulls(positions);
+        requestAnimationFrame(renderLoop);
     }
+    requestAnimationFrame(renderLoop);
 }
 
 
@@ -139,27 +145,12 @@ function calculateEnergy(positions) {
     return energy;
 }
 
-function computeConvexHullArea(hull) {
-    let area = 0;
-    const n = hull.length;
 
-    for (let i = 0; i < n; i++) {
-        const j = (i + 1) % n;
-        area += hull[i].x * hull[j].y;
-        area -= hull[j].x * hull[i].y;
-    }
-
-    return Math.abs(area) / 2;
-}
 
 function generateNeighbor(positions) {
     const newPositions = positions.map(pos => ({ ...pos }));
-    const index = Math.floor(Math.random() * newPositions.length);
-    const area = computeConvexHullArea(newPositions[index].hull);
-
-    // Determine jitter amount based on area
-    const jitterAmount = Math.sqrt(area) * 0.2; // Adjust the multiplier as needed
-
+    const index = Math.floor(Math.random() * newPositions.length);  
+    const jitterAmount = 20; 
     newPositions[index].x += (Math.random() - 0.5) * jitterAmount;
     newPositions[index].y += (Math.random() - 0.5) * jitterAmount;
     return newPositions;
