@@ -74,7 +74,7 @@ function fetchImagesFromJSON() {
     fetch('image_list.json')
         .then(response => response.json())
         .then(images => {
-            const imagePaths = getRandomSlice(images, 20);
+            const imagePaths = getRandomSlice(images, 7);
             updateURLWithImages(imagePaths);
             loadImages(imagePaths);
         })
@@ -145,14 +145,37 @@ function calculateEnergy(positions) {
     return energy;
 }
 
-
-
 function generateNeighbor(positions) {
     const newPositions = positions.map(pos => ({ ...pos }));
-    const index = Math.floor(Math.random() * newPositions.length);  
-    const jitterAmount = 20; 
-    newPositions[index].x += (Math.random() - 0.5) * jitterAmount;
-    newPositions[index].y += (Math.random() - 0.5) * jitterAmount;
+    const action = Math.floor(Math.random() * 3); // Randomly choose an action: 0 = jitter, 1 = swap, 2 = rotate
+
+    if (action === 0) {
+        // Jitter x, y
+        const index = Math.floor(Math.random() * newPositions.length);
+        const jitterAmount = 20;
+        newPositions[index].x += (Math.random() - 0.5) * jitterAmount;
+        newPositions[index].y += (Math.random() - 0.5) * jitterAmount;
+    } else if (action === 1) {
+        // Swap positions
+        const index1 = Math.floor(Math.random() * newPositions.length);
+        let index2 = Math.floor(Math.random() * newPositions.length);
+        while (index1 === index2) {
+            index2 = Math.floor(Math.random() * newPositions.length);
+        }
+        // Swap x and y coordinates
+        const tempX = newPositions[index1].x;
+        const tempY = newPositions[index1].y;
+        newPositions[index1].x = newPositions[index2].x;
+        newPositions[index1].y = newPositions[index2].y;
+        newPositions[index2].x = tempX;
+        newPositions[index2].y = tempY;
+    } else if (action === 2) {
+        // Random rotation
+        const index = Math.floor(Math.random() * newPositions.length);
+        const rotationAmount = Math.random() * 360; // Random rotation between 0 and 360 degrees
+        newPositions[index].rotation = (newPositions[index].rotation || 0) + rotationAmount;
+    }
+
     return newPositions;
 }
 
