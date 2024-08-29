@@ -1,19 +1,3 @@
-export function canPlaceImage(x, y, hull, positions) {
-    const newHull = hull.map(point => ({ x: point.x + x, y: point.y + y }));
-
-    for (const pos of positions) {
-        const placedHull = computeConvexHull(getImageData(pos.img)).map(point => ({
-            x: point.x + pos.x,
-            y: point.y + pos.y
-        }));
-
-        if (hullsIntersect(newHull, placedHull)) {
-            return false;
-        }
-    }
-    return true;
-}
-
 
 export function computeConvexHull(imageData) {
     const points = [];
