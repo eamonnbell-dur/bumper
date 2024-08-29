@@ -12,6 +12,12 @@ let offsetX, offsetY;
 let currentImageIndex = 0;
 let selectedItem = null; // Global variable to store the selected item
 
+let temperature = 1000;
+const coolingRate = 0.01;
+let currentEnergy;
+let iteration = 0;
+const redrawInterval = 10; // Adjust this value to control redraw frequency
+
 function getRandomSlice(arr, n) {
     const result = [];
     const arrayCopy = [...arr];
@@ -90,16 +96,12 @@ function packImages() {
         positions.push({ img, x: Math.random() * (canvas.width - img.width), y: Math.random() * (canvas.height - img.height), rotation: 0, hull });
     });
 
-    simulatedAnnealing(positions);
-    renderImages(positions);
+    currentEnergy = calculateEnergy(positions);
+    animateAnnealing();
 }
 
-function simulatedAnnealing(positions) {
-    let temperature = 1000;
-    const coolingRate = 0.05;
-    let currentEnergy = calculateEnergy(positions);
-
-    while (temperature > 1) {
+function animateAnnealing() {
+    if (temperature > 1) {
         const newPositions = generateNeighbor(positions);
         const newEnergy = calculateEnergy(newPositions);
 
@@ -109,8 +111,21 @@ function simulatedAnnealing(positions) {
         }
 
         temperature *= 1 - coolingRate;
+        iteration++;
+
+        if (iteration % redrawInterval === 0) {
+            renderImages(positions);
+            renderHulls(positions);
+        }
+
+        requestAnimationFrame(animateAnnealing);
+    } else {
+        // Final render after annealing is complete
+        renderImages(positions);
+        renderHulls(positions);
     }
 }
+
 
 function calculateEnergy(positions) {
     let energy = 0;
@@ -124,11 +139,29 @@ function calculateEnergy(positions) {
     return energy;
 }
 
+function computeConvexHullArea(hull) {
+    let area = 0;
+    const n = hull.length;
+
+    for (let i = 0; i < n; i++) {
+        const j = (i + 1) % n;
+        area += hull[i].x * hull[j].y;
+        area -= hull[j].x * hull[i].y;
+    }
+
+    return Math.abs(area) / 2;
+}
+
 function generateNeighbor(positions) {
     const newPositions = positions.map(pos => ({ ...pos }));
     const index = Math.floor(Math.random() * newPositions.length);
-    newPositions[index].x += (Math.random() - 0.5) * 20;
-    newPositions[index].y += (Math.random() - 0.5) * 20;
+    const area = computeConvexHullArea(newPositions[index].hull);
+
+    // Determine jitter amount based on area
+    const jitterAmount = Math.sqrt(area) * 0.2; // Adjust the multiplier as needed
+
+    newPositions[index].x += (Math.random() - 0.5) * jitterAmount;
+    newPositions[index].y += (Math.random() - 0.5) * jitterAmount;
     return newPositions;
 }
 
@@ -147,6 +180,26 @@ function renderImages(positions) {
         ctx.rotate(pos.rotation * Math.PI / 180);
         ctx.drawImage(pos.img, -pos.img.width / 2, -pos.img.height / 2);
         ctx.restore();
+    });
+}
+
+function renderHulls(positions) {
+    positions.forEach(pos => {
+        if (pos.hull && pos.hull.length > 0) {
+            ctx.save();
+            ctx.translate(pos.x + pos.img.width / 2, pos.y + pos.img.height / 2);
+            ctx.rotate(pos.rotation * Math.PI / 180);
+            ctx.beginPath();
+            ctx.moveTo(pos.hull[0].x - pos.img.width / 2, pos.hull[0].y - pos.img.height / 2);
+            for (let i = 1; i < pos.hull.length; i++) {
+                ctx.lineTo(pos.hull[i].x - pos.img.width / 2, pos.hull[i].y - pos.img.height / 2);
+            }
+            ctx.closePath();
+            ctx.strokeStyle = 'green';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.restore();
+        }
     });
 }
 
@@ -225,6 +278,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('homeButton').addEventListener('click', () => {
         window.location.href = '/';
+    });
+
+    document.getElementById('renderHulls').addEventListener('click', () => {
+        renderHulls(positions);
     });
 
     document.addEventListener('click', (e) => {
