@@ -16,7 +16,9 @@ let temperature = 1000;
 const coolingRate = 0.01;
 let currentEnergy;
 let iteration = 0;
+
 const redrawInterval = 10; // Adjust this value to control redraw frequency
+let annealingDone = false;
 
 function getRandomSlice(arr, n) {
     const result = [];
@@ -74,7 +76,7 @@ function fetchImagesFromJSON() {
     fetch('image_list.json')
         .then(response => response.json())
         .then(images => {
-            const imagePaths = getRandomSlice(images, 7);
+            const imagePaths = getRandomSlice(images, 10);
             updateURLWithImages(imagePaths);
             loadImages(imagePaths);
         })
@@ -105,6 +107,7 @@ function startAnnealing() {
     const annealingInterval = setInterval(() => {
         if (temperature <= 1) {
             clearInterval(annealingInterval);
+            annealingDone = true; // Set a flag to indicate annealing is done
             return;
         }
 
@@ -123,6 +126,12 @@ function startAnnealing() {
 
 function startRendering() {
     function renderLoop() {
+        if (annealingDone) {
+            renderImages(positions);
+            renderHulls(positions);
+            return; // Stop the loop when annealing is done
+        }
+
         if (iteration % redrawInterval === 0) {
             renderImages(positions);
             renderHulls(positions);
@@ -133,11 +142,20 @@ function startRendering() {
 }
 
 
+
 function calculateEnergy(positions) {
+    function offsetHull(hull, offsetX, offsetY) {
+        return hull.map(point => ({
+            x: point.x + offsetX,
+            y: point.y + offsetY
+        }));
+    }
+
     let energy = 0;
     for (let i = 0; i < positions.length; i++) {
         for (let j = i + 1; j < positions.length; j++) {
-            if (hullsIntersect(positions[i].hull, positions[j].hull)) {
+            if (hullsIntersect(offsetHull(positions[i].hull, positions[i].x, positions[i].y)
+                , offsetHull(positions[j].hull, positions[j].x, positions[j].y))) {
                 energy += 1;
             }
         }
