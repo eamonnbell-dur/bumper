@@ -1,4 +1,4 @@
-import { computeConvexHull, computeConvexHullArea, hullsIntersect, getImageData } from './utils.js'
+import { computeConvexHull, computeConvexHullArea, hullsIntersect, getImageData, interpolateVectorsLinear } from './utils.js'
 
 const canvas = document.getElementById('packingCanvas');
 const ctx = canvas.getContext('2d');
@@ -19,8 +19,11 @@ let iteration = 0;
 const redrawInterval = 1; // Adjust this value to control redraw frequency
 let annealingDone = false;
 
-
 let selectedIndex = -1;
+
+let leftConceptEmbedding = null;
+let rightConceptEmbedding = null;
+let currentVectorQuery = null;
 
 
 const worker = new Worker('worker.js', { type: "module" });
@@ -66,8 +69,23 @@ function getImagePathsFromURL() {
 
 async function embedImages(images) {
     const base64Images = await Promise.all(images.map(image => convertToBase64(image)));
-    // worker.postMessage({type: 'image', images: base64Images});
+    // worker.postMessage({type: 'image', content: base64Images});
 }
+
+function runWorkerTask(worker, message) {
+    return new Promise((resolve, reject) => {
+        worker.onmessage = (event) => {
+            if (event.data.status === 'complete') {
+                resolve(event.data.output);
+            }
+        };
+        worker.onerror = (error) => {
+            reject(error);
+        };
+        worker.postMessage(message);
+    });
+}
+
 
 function convertToBase64(image) {
     return new Promise((resolve, reject) => {
@@ -109,7 +127,7 @@ function fetchImagesFromJSON() {
     fetch('image_list.json')
         .then(response => response.json())
         .then(images => {
-            const imagePaths = getRandomSlice(images, 20);
+            const imagePaths = getRandomSlice(images, 10);
             updateURLWithImages(imagePaths);
             loadImages(imagePaths);
         })
@@ -371,6 +389,7 @@ document.addEventListener('DOMContentLoaded', () => {
     leftTargetInput.addEventListener('input', checkForDuplicates);
     rightTargetInput.addEventListener('input', checkForDuplicates);
 
+    // Save concept pair
     saveButton.addEventListener('click', () => {
         const leftTarget = leftTargetInput.value;
         const rightTarget = rightTargetInput.value;
@@ -384,13 +403,26 @@ document.addEventListener('DOMContentLoaded', () => {
         // Set the new pair as the selected item
         dropdown.value = newPair;
         selectedItem = newPair;
-        console.log(`Selected item: ${selectedItem}`);
+
+        updateConceptPairEmbeddings(newPair).then(() => {
+            console.log('Concept Pair Embeddings updated');
+        });
+    });
+
+    // Save canvas
+    document.getElementById('saveButton').addEventListener('click', () => {
+        const link = document.createElement('a');
+        link.download = 'canvas_image.png';
+        link.href = canvas.toDataURL();
+        link.click();
     });
 
     dropdown.addEventListener('change', (e) => {
         selectedItem = e.target.value;
-        console.log(`Selected item: ${selectedItem}`);
         updateInputs(selectedItem);
+        updateConceptPairEmbeddings(selectedItem).then(() => {
+            console.log('Concept Pair Embeddings updated');
+        });
     });
 
     // Initial check for duplicates on page load
@@ -430,8 +462,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('slider').addEventListener('input', (e) => {
         const sliderValue = parseFloat(slider.value);
-        currentImageIndex = Math.round((sliderValue + 1) / 2 * (loadedImages.length - 1));
+        currentImageIndex = Math.round(sliderValue * (loadedImages.length - 1));
         positions[selectedIndex].img = loadedImages[currentImageIndex];
+
+        if (rightConceptEmbedding != null && leftConceptEmbedding != null){
+            currentVectorQuery = interpolateVectorsLinear(leftConceptEmbedding, rightConceptEmbedding, sliderValue);
+        }
+
         updateURLWithCurrentImage();
         renderImages(positions);
     });
@@ -444,11 +481,23 @@ function showContextMenu(x, y) {
     contextMenu.style.display = 'block';
 }
 
+async function updateConceptPairEmbeddings(pair){
+    const [left, right] = pair.split('-');
+
+    try {
+        const leftResult = await runWorkerTask(worker, { type: 'text', content: left });
+        const rightResult = await runWorkerTask(worker, { type: 'text', content: right });
+        leftConceptEmbedding = JSON.parse(leftResult);
+        rightConceptEmbedding = JSON.parse(rightResult);
+    } catch (error) {
+        console.error('Worker error:', error);
+    }
+}
+
 canvas.addEventListener('contextmenu', (e) => {
     e.preventDefault();
     showContextMenu(e.clientX, e.clientY);
 });
-
 
 
 // Main logic to determine image paths

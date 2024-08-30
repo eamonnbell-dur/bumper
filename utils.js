@@ -89,3 +89,36 @@ function rayIntersectsSegment(p, a, b) {
 function isCounterClockwise(p1, p2, p3) {
     return (p2.x - p1.x) * (p3.y - p1.y) - (p2.y - p1.y) * (p3.x - p1.x) > 0;
 }
+
+export function interpolateVectorsLinear(vec1, vec2, t) {
+    const result = {};
+    for (const key in vec1) {
+        if (vec1.hasOwnProperty(key) && vec2.hasOwnProperty(key)) {
+            result[key] = vec1[key] * (1 - t) + vec2[key] * t;
+        }
+    }
+    return result;
+}
+
+export function interpolateVectorsSpherical(vec1, vec2, t) {
+    const dot = vec1.x * vec2.x + vec1.y * vec2.y + vec1.z * vec2.z;
+    const theta = Math.acos(Math.max(-1, Math.min(1, dot)));
+    const sinTheta = Math.sin(theta);
+
+    if (sinTheta < 0.001) {
+        return {
+            x: vec1.x * (1 - t) + vec2.x * t,
+            y: vec1.y * (1 - t) + vec2.y * t,
+            z: vec1.z * (1 - t) + vec2.z * t
+        };
+    }
+
+    const a = Math.sin((1 - t) * theta) / sinTheta;
+    const b = Math.sin(t * theta) / sinTheta;
+
+    return {
+        x: vec1.x * a + vec2.x * b,
+        y: vec1.y * a + vec2.y * b,
+        z: vec1.z * a + vec2.z * b
+    };
+}

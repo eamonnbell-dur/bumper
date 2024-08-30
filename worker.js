@@ -36,7 +36,7 @@ class ApplicationSingleton {
 }
 
 self.addEventListener('message', async (event) => {
-    const { type, images } = event.data;
+    const { type, content } = event.data;
 
     // Get the tokenizer, models, and processor. When called for the first time,
     // this will load the files and cache them for future use.
@@ -47,21 +47,22 @@ self.addEventListener('message', async (event) => {
         self.postMessage({ status: 'ready' });
 
         // Run tokenization
-        const text_inputs = tokenizer(data.text, { padding: true, truncation: true });
+        const text_inputs = tokenizer(content, { padding: true, truncation: true });
 
         // Compute embeddings
         const { text_embeds } = await text_model(text_inputs);
         // Send the output back to the main thread
         self.postMessage({
             status: 'complete',
-            output: JSON.stringify(text_embeds),
+            output: JSON.stringify(text_embeds.data),
         });
+
     } else if (type === 'image') {
         // Send the output back to the main thread
         self.postMessage({ status: 'ready' });
 
         // Process the image data
-        const rawimages = await Promise.all(images.map(image => RawImage.read(image)));
+        const rawimages = await Promise.all(content.map(image => RawImage.read(image)));
         const image_inputs = await processor(rawimages);
 
         // Compute embeddings
