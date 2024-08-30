@@ -1,3 +1,7 @@
+// adapted from https://github.com/xenova/transformers.js/blob/main/examples/semantic-image-search-client/src/app/worker.js
+// Apache 2.0 https://github.com/xenova/transformers.js/blob/main/LICENSE
+// Author: Xenova (https://github.com/xenova/)
+
 import { env, AutoTokenizer, AutoProcessor, CLIPTextModelWithProjection, CLIPVisionModelWithProjection, RawImage} from './scripts/transformers.min.js';
 
 const EMBED_DIM = 512;
