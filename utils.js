@@ -43,6 +43,13 @@ export function computeConvexHullArea(hull) {
     return Math.abs(area) / 2;
 }
 
+export function offsetHull(hull, offsetX, offsetY) {
+    return hull.map(point => ({
+        x: point.x + offsetX,
+        y: point.y + offsetY
+    }));
+}
+
 export function getImageData(img) {
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = img.width;

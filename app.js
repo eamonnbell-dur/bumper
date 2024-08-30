@@ -1,9 +1,8 @@
-import {computeConvexHull, computeConvexHullArea, hullsIntersect, getImageData}  from './utils.js'
+import { computeConvexHull, computeConvexHullArea, hullsIntersect, getImageData } from './utils.js'
 
 const canvas = document.getElementById('packingCanvas');
 const ctx = canvas.getContext('2d');
 
-let images = []; // Add your image paths here
 const loadedImages = [];
 let positions = [];
 let dragging = false;
@@ -12,13 +11,28 @@ let offsetX, offsetY;
 let currentImageIndex = 0;
 let selectedItem = null; // Global variable to store the selected item
 
-let temperature = 1000;
-const coolingRate = 0.01;
+let temperature = 10;
+const coolingRate = 1;
 let currentEnergy;
 let iteration = 0;
 
-const redrawInterval = 10; // Adjust this value to control redraw frequency
+const redrawInterval = 1; // Adjust this value to control redraw frequency
 let annealingDone = false;
+
+
+let selectedIndex = -1;
+
+
+const worker = new Worker('worker.js', { type: "module" });
+
+worker.onmessage = (event) => {
+    const { status, output } = event.data;
+    if (status === 'ready') {
+        console.log('Worker is ready');
+    } else if (status === 'complete') {
+        console.log('Embeddings:', event.data);
+    }
+};
 
 function getRandomSlice(arr, n) {
     const result = [];
@@ -50,6 +64,23 @@ function getImagePathsFromURL() {
     return null;
 }
 
+async function embedImages(images) {
+    const base64Images = await Promise.all(images.map(image => convertToBase64(image)));
+    // worker.postMessage({type: 'image', images: base64Images});
+}
+
+function convertToBase64(image) {
+    return new Promise((resolve, reject) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = image.width;
+        canvas.height = image.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(image, 0, 0);
+        resolve(canvas.toDataURL());
+    });
+}
+
+
 function loadImages(imagePaths) {
     const imagePromises = imagePaths.map(src => {
         return new Promise((resolve, reject) => {
@@ -66,9 +97,11 @@ function loadImages(imagePaths) {
     // Wait for all images to load
     Promise.all(imagePromises).then(() => {
         packImages();
+        embedImages(loadedImages);
     }).catch(error => {
         console.error('Error loading images:', error);
     });
+
 }
 
 // Fetch the JSON file containing the image list
@@ -76,7 +109,7 @@ function fetchImagesFromJSON() {
     fetch('image_list.json')
         .then(response => response.json())
         .then(images => {
-            const imagePaths = getRandomSlice(images, 10);
+            const imagePaths = getRandomSlice(images, 20);
             updateURLWithImages(imagePaths);
             loadImages(imagePaths);
         })
@@ -128,13 +161,13 @@ function startRendering() {
     function renderLoop() {
         if (annealingDone) {
             renderImages(positions);
-            renderHulls(positions);
+            // renderHulls(positions);
             return; // Stop the loop when annealing is done
         }
 
         if (iteration % redrawInterval === 0) {
             renderImages(positions);
-            renderHulls(positions);
+            // renderHulls(positions);
         }
         requestAnimationFrame(renderLoop);
     }
@@ -154,8 +187,8 @@ function calculateEnergy(positions) {
     let energy = 0;
     for (let i = 0; i < positions.length; i++) {
         for (let j = i + 1; j < positions.length; j++) {
-            if (hullsIntersect(offsetHull(positions[i].hull, positions[i].x, positions[i].y)
-                , offsetHull(positions[j].hull, positions[j].x, positions[j].y))) {
+            if (hullsIntersect(offsetHull(positions[i].hull, positions[i].x, positions[i].y),
+                offsetHull(positions[j].hull, positions[j].x, positions[j].y))) {
                 energy += 1;
             }
         }
@@ -206,11 +239,18 @@ function acceptanceProbability(currentEnergy, newEnergy, temperature) {
 
 function renderImages(positions) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    positions.forEach(pos => {
+    positions.forEach((pos, index) => {
         ctx.save();
         ctx.translate(pos.x + pos.img.width / 2, pos.y + pos.img.height / 2);
         ctx.rotate(pos.rotation * Math.PI / 180);
         ctx.drawImage(pos.img, -pos.img.width / 2, -pos.img.height / 2);
+
+        if (index === selectedIndex) {
+            ctx.strokeStyle = 'red';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(-pos.img.width / 2, -pos.img.height / 2, pos.img.width, pos.img.height);
+        }
+
         ctx.restore();
     });
 }
@@ -248,11 +288,16 @@ canvas.addEventListener('mousedown', (e) => {
             offsetX = mouseX - pos.x;
             offsetY = mouseY - pos.y;
             clickedOnImage = true;
+            selectedIndex = i;
             break;
         }
     }
 
+    if (!clickedOnImage) {
+        selectedIndex = -1;
+    }
 
+    renderImages(positions);
 });
 
 canvas.addEventListener('mousemove', (e) => {
@@ -289,20 +334,67 @@ canvas.addEventListener('wheel', (e) => {
     }
 });
 
-
 function updateURLWithCurrentImage() {
     const url = new URL(window.location);
     const imagePaths = loadedImages.map(img => img.src);
     url.searchParams.set('images', imagePaths.join(','));
     window.history.replaceState({}, '', url);
 }
+
 document.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('saveButton').addEventListener('click', () => {
-        const link = document.createElement('a');
-        link.download = 'canvas_image.png';
-        link.href = canvas.toDataURL();
-        link.click();
+    const saveButton = document.getElementById('saveConceptPair');
+    const leftTargetInput = document.getElementById('leftTarget');
+    const rightTargetInput = document.getElementById('rightTarget');
+    const dropdown = document.getElementById('dropdown');
+
+    function checkForDuplicates() {
+        const leftTarget = leftTargetInput.value;
+        const rightTarget = rightTargetInput.value;
+        const newPair = `${leftTarget}-${rightTarget}`;
+
+        for (let i = 0; i < dropdown.options.length; i++) {
+            if (dropdown.options[i].value === newPair) {
+                saveButton.disabled = true;
+                return;
+            }
+        }
+        saveButton.disabled = false;
+    }
+
+    function updateInputs(pair) {
+        const [left, right] = pair.split('-');
+        leftTargetInput.value = left;
+        rightTargetInput.value = right;
+        saveButton.disabled = true; // Disable save button when an item is selected
+    }
+
+    leftTargetInput.addEventListener('input', checkForDuplicates);
+    rightTargetInput.addEventListener('input', checkForDuplicates);
+
+    saveButton.addEventListener('click', () => {
+        const leftTarget = leftTargetInput.value;
+        const rightTarget = rightTargetInput.value;
+        const newPair = `${leftTarget}-${rightTarget}`;
+
+        const newOption = document.createElement('option');
+        newOption.value = newPair;
+        newOption.text = newPair;
+        dropdown.add(newOption);
+
+        // Set the new pair as the selected item
+        dropdown.value = newPair;
+        selectedItem = newPair;
+        console.log(`Selected item: ${selectedItem}`);
     });
+
+    dropdown.addEventListener('change', (e) => {
+        selectedItem = e.target.value;
+        console.log(`Selected item: ${selectedItem}`);
+        updateInputs(selectedItem);
+    });
+
+    // Initial check for duplicates on page load
+    checkForDuplicates();
 
     document.getElementById('refreshButton').addEventListener('click', () => {
         location.reload();
@@ -323,14 +415,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    document.getElementById('dropdown').addEventListener('change', (e) => {
-        selectedItem = e.target.value;
-        console.log(`Selected item: ${selectedItem}`);
-    });
-
     document.getElementById('searchInput').addEventListener('input', (e) => {
         const filter = e.target.value.toLowerCase();
-        const options = document.getElementById('dropdown').options;
+        const options = dropdown.options;
         for (let i = 0; i < options.length; i++) {
             const option = options[i];
             if (option.text.toLowerCase().includes(filter)) {
@@ -340,11 +427,14 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
     });
-});
 
-canvas.addEventListener('contextmenu', (e) => {
-    e.preventDefault();
-    showContextMenu(e.clientX, e.clientY);
+    document.getElementById('slider').addEventListener('input', (e) => {
+        const sliderValue = parseFloat(slider.value);
+        currentImageIndex = Math.round((sliderValue + 1) / 2 * (loadedImages.length - 1));
+        positions[selectedIndex].img = loadedImages[currentImageIndex];
+        updateURLWithCurrentImage();
+        renderImages(positions);
+    });
 });
 
 function showContextMenu(x, y) {
@@ -354,6 +444,13 @@ function showContextMenu(x, y) {
     contextMenu.style.display = 'block';
 }
 
+canvas.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    showContextMenu(e.clientX, e.clientY);
+});
+
+
+
 // Main logic to determine image paths
 const imagePaths = getImagePathsFromURL();
 if (imagePaths) {
@@ -361,3 +458,4 @@ if (imagePaths) {
 } else {
     fetchImagesFromJSON();
 }
+
