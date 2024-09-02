@@ -100,25 +100,49 @@ export function interpolateVectorsLinear(vec1, vec2, t) {
     return result;
 }
 
-export function interpolateVectorsSpherical(vec1, vec2, t) {
-    const dot = vec1.x * vec2.x + vec1.y * vec2.y + vec1.z * vec2.z;
-    const theta = Math.acos(Math.max(-1, Math.min(1, dot)));
-    const sinTheta = Math.sin(theta);
-
-    if (sinTheta < 0.001) {
-        return {
-            x: vec1.x * (1 - t) + vec2.x * t,
-            y: vec1.y * (1 - t) + vec2.y * t,
-            z: vec1.z * (1 - t) + vec2.z * t
-        };
-    }
-
-    const a = Math.sin((1 - t) * theta) / sinTheta;
-    const b = Math.sin(t * theta) / sinTheta;
-
-    return {
-        x: vec1.x * a + vec2.x * b,
-        y: vec1.y * a + vec2.y * b,
-        z: vec1.z * a + vec2.z * b
-    };
+function cosineSimilarity(vecA, vecB) {
+    const dotProduct = vecA.reduce((sum, a, idx) => sum + a * vecB[idx], 0);
+    const magnitudeA = Math.sqrt(vecA.reduce((sum, a) => sum + a * a, 0));
+    const magnitudeB = Math.sqrt(vecB.reduce((sum, b) => sum + b * b, 0));
+    return dotProduct / (magnitudeA * magnitudeB);
 }
+
+function convertQueryEmbedding(queryEmbedding) {
+    return Object.keys(queryEmbedding).sort((a, b) => a - b).map(key => queryEmbedding[key]);
+}
+
+export function findClosestVector(queryEmbedding, embeddings) {
+    const queryVector = convertQueryEmbedding(queryEmbedding);
+    let maxSimilarity = -1;
+    let closestEmbedding = null;
+
+    embeddings.forEach(embedding => {
+        const similarity = cosineSimilarity(queryVector, embedding.embedding);
+        if (similarity > maxSimilarity) {
+            maxSimilarity = similarity;
+            closestEmbedding = embedding;
+        }
+    });
+
+    return closestEmbedding;
+}
+
+export function findTopNClosestVectors(queryEmbedding, embeddings, n) {
+    const queryVector = convertQueryEmbedding(queryEmbedding);
+    const topN = [];
+
+    embeddings.forEach(embedding => {
+        const similarity = cosineSimilarity(queryVector, embedding.embedding);
+        
+        if (topN.length < n) {
+            topN.push({ embedding, similarity });
+            topN.sort((a, b) => b.similarity - a.similarity);
+        } else if (similarity > topN[topN.length - 1].similarity) {
+            topN[topN.length - 1] = { embedding, similarity };
+            topN.sort((a, b) => b.similarity - a.similarity);
+        }
+    });
+
+    return topN;
+}
+

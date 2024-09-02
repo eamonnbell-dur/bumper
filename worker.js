@@ -2,7 +2,7 @@
 // Apache 2.0 https://github.com/xenova/transformers.js/blob/main/LICENSE
 // Author: Xenova (https://github.com/xenova/)
 
-import { env, AutoTokenizer, AutoProcessor, CLIPTextModelWithProjection, CLIPVisionModelWithProjection, RawImage} from './scripts/transformers.min.js';
+import { env, AutoTokenizer, AutoProcessor, CLIPTextModelWithProjection, CLIPVisionModelWithProjection, RawImage} from 'https://cdn.jsdelivr.net/npm/@xenova/transformers';
 
 const EMBED_DIM = 512;
 env.allowLocalModels = false;

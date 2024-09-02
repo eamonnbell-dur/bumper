@@ -1,4 +1,6 @@
-import { computeConvexHull, computeConvexHullArea, hullsIntersect, getImageData, interpolateVectorsLinear } from './utils.js'
+import { computeConvexHull, computeConvexHullArea, 
+    hullsIntersect, getImageData, interpolateVectorsLinear, 
+    findClosestVector, findTopNClosestVectors } from './utils.js'
 
 const canvas = document.getElementById('packingCanvas');
 const ctx = canvas.getContext('2d');
@@ -10,6 +12,8 @@ let dragIndex = -1;
 let offsetX, offsetY;
 let currentImageIndex = 0;
 let selectedItem = null; // Global variable to store the selected item
+
+let embeddings = null;
 
 let temperature = 10;
 const coolingRate = 1;
@@ -25,6 +29,7 @@ let leftConceptEmbedding = null;
 let rightConceptEmbedding = null;
 let currentVectorQuery = null;
 
+let embeddingQueries = {};
 
 const worker = new Worker('worker.js', { type: "module" });
 
@@ -134,6 +139,16 @@ function fetchImagesFromJSON() {
         .catch(error => {
             console.error('Error fetching image list:', error);
         });
+}
+
+function fetchImageEmbeddingsFromJSON() {
+    fetch('images/embeddings.json')
+        .then(response => response.json())
+        .then(data => {
+            embeddings = data;
+            console.log("Pre-computed image embeddings loaded!");
+        })
+        .catch(error => console.error('Error loading embeddings:', error));
 }
 
 function updateURLWithImages(imagePaths) {
@@ -462,11 +477,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('slider').addEventListener('input', (e) => {
         const sliderValue = parseFloat(slider.value);
-        currentImageIndex = Math.round(sliderValue * (loadedImages.length - 1));
-        positions[selectedIndex].img = loadedImages[currentImageIndex];
 
-        if (rightConceptEmbedding != null && leftConceptEmbedding != null){
-            currentVectorQuery = interpolateVectorsLinear(leftConceptEmbedding, rightConceptEmbedding, sliderValue);
+        if (rightConceptEmbedding != null && leftConceptEmbedding != null) {
+             
+            let cv = embeddingQueries[sliderValue];
+
+            const loadImage = new Promise((resolve, reject) => {
+                const img = new Image();
+                img.src = `${cv.embedding.path}`;
+                img.onload = () => {
+                    positions[selectedIndex].img = img;
+                    resolve();
+                };
+                img.onerror = reject;
+            });
+
+            loadImage.then(() => {
+                console.log(`Replacement image (${cv.embedding.path}) loaded successfully`);
+            }).catch(error => {
+                console.error('Error loading image:', error);
+            });
+
+        } else {
+            currentImageIndex = Math.round(sliderValue * (loadedImages.length - 1));
+            positions[selectedIndex].img = loadedImages[currentImageIndex];
+            updateURLWithCurrentImage();
         }
 
         updateURLWithCurrentImage();
@@ -481,7 +516,12 @@ function showContextMenu(x, y) {
     contextMenu.style.display = 'block';
 }
 
-async function updateConceptPairEmbeddings(pair){
+function roundToStep(value, step) {
+    const inv = 1.0 / step;
+    return Math.round(value * inv) / inv;
+}
+
+async function updateConceptPairEmbeddings(pair) {
     const [left, right] = pair.split('-');
 
     try {
@@ -492,6 +532,32 @@ async function updateConceptPairEmbeddings(pair){
     } catch (error) {
         console.error('Worker error:', error);
     }
+
+    const slider = document.getElementById('slider');
+    const min = parseFloat(slider.min);
+    const max = parseFloat(slider.max);
+    const step = parseFloat(slider.step) || 1; // Default step is 1 if not specified
+
+    const values = [];
+    for (let value = min; value <= max; value += step) {
+        values.push(roundToStep(value, step));
+    }
+
+    const topNForValue = {};
+    const usedVectors = new Set();
+
+    for (const sliderValue of values) {
+        const currentVectorQuery = interpolateVectorsLinear(leftConceptEmbedding, rightConceptEmbedding, sliderValue);
+        topNForValue[sliderValue] = findTopNClosestVectors(currentVectorQuery, embeddings, values.length);
+        for (const vector of topNForValue[sliderValue]) {
+            if (!usedVectors.has(vector.embedding.embedding)) {
+                embeddingQueries[sliderValue] = vector;
+                usedVectors.add(vector.embedding.embedding);
+                break;
+            }
+        }
+    }
+
 }
 
 canvas.addEventListener('contextmenu', (e) => {
@@ -504,7 +570,9 @@ canvas.addEventListener('contextmenu', (e) => {
 const imagePaths = getImagePathsFromURL();
 if (imagePaths) {
     loadImages(imagePaths);
+    fetchImageEmbeddingsFromJSON();
 } else {
     fetchImagesFromJSON();
+    fetchImageEmbeddingsFromJSON();
 }
 
