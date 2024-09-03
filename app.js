@@ -1,15 +1,15 @@
-import { computeConvexHull, computeConvexHullArea, 
-    hullsIntersect, getImageData, interpolateVectorsLinear, 
-    findClosestVector, findTopNClosestVectors } from './utils.js'
+import { computeConvexHull, hullsIntersect, getImageData, interpolateVectorsLinear, 
+    findTopNClosestVectors } from './utils.js'
 
-const canvas = document.getElementById('packingCanvas');
-const ctx = canvas.getContext('2d');
+const NUM_INITIAL_IMAGES = 30;
 
 const loadedImages = [];
 let positions = [];
+
 let dragging = false;
 let dragIndex = -1;
 let offsetX, offsetY;
+
 let currentImageIndex = 0;
 let selectedItem = null; // Global variable to store the selected item
 
@@ -19,7 +19,6 @@ let temperature = 10;
 const coolingRate = 1;
 let currentEnergy;
 let iteration = 0;
-
 const redrawInterval = 1; // Adjust this value to control redraw frequency
 let annealingDone = false;
 
@@ -31,6 +30,8 @@ let currentVectorQuery = null;
 
 let embeddingQueries = {};
 
+const canvas = document.getElementById('packingCanvas');
+const ctx = canvas.getContext('2d');
 const worker = new Worker('worker.js', { type: "module" });
 
 worker.onmessage = (event) => {
@@ -132,7 +133,7 @@ function fetchImagesFromJSON() {
     fetch('image_list.json')
         .then(response => response.json())
         .then(images => {
-            const imagePaths = getRandomSlice(images, 10);
+            const imagePaths = getRandomSlice(images, NUM_INITIAL_IMAGES);
             updateURLWithImages(imagePaths);
             loadImages(imagePaths);
         })
@@ -477,7 +478,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('slider').addEventListener('input', (e) => {
         const sliderValue = parseFloat(slider.value);
-
         if (rightConceptEmbedding != null && leftConceptEmbedding != null) {
              
             let cv = embeddingQueries[sliderValue];
@@ -487,6 +487,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 img.src = `${cv.embedding.path}`;
                 img.onload = () => {
                     positions[selectedIndex].img = img;
+                    renderImages(positions);
                     resolve();
                 };
                 img.onerror = reject;
@@ -502,10 +503,9 @@ document.addEventListener('DOMContentLoaded', () => {
             currentImageIndex = Math.round(sliderValue * (loadedImages.length - 1));
             positions[selectedIndex].img = loadedImages[currentImageIndex];
             updateURLWithCurrentImage();
+            renderImages(positions);
         }
 
-        updateURLWithCurrentImage();
-        renderImages(positions);
     });
 });
 
@@ -522,6 +522,9 @@ function roundToStep(value, step) {
 }
 
 async function updateConceptPairEmbeddings(pair) {
+    const slider = document.getElementById('slider');
+    slider.disabled = true;
+
     const [left, right] = pair.split('-');
 
     try {
@@ -533,7 +536,6 @@ async function updateConceptPairEmbeddings(pair) {
         console.error('Worker error:', error);
     }
 
-    const slider = document.getElementById('slider');
     const min = parseFloat(slider.min);
     const max = parseFloat(slider.max);
     const step = parseFloat(slider.step) || 1; // Default step is 1 if not specified
@@ -546,6 +548,7 @@ async function updateConceptPairEmbeddings(pair) {
     const topNForValue = {};
     const usedVectors = new Set();
 
+    // greedy filling of slider
     for (const sliderValue of values) {
         const currentVectorQuery = interpolateVectorsLinear(leftConceptEmbedding, rightConceptEmbedding, sliderValue);
         topNForValue[sliderValue] = findTopNClosestVectors(currentVectorQuery, embeddings, values.length);
@@ -558,6 +561,7 @@ async function updateConceptPairEmbeddings(pair) {
         }
     }
 
+    slider.disabled = false;
 }
 
 canvas.addEventListener('contextmenu', (e) => {
