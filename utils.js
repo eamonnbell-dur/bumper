@@ -100,7 +100,7 @@ export function interpolateVectorsLinear(vec1, vec2, t) {
     return result;
 }
 
-function cosineSimilarity(vecA, vecB) {
+export function cosineSimilarity(vecA, vecB) {
     const dotProduct = vecA.reduce((sum, a, idx) => sum + a * vecB[idx], 0);
     const magnitudeA = Math.sqrt(vecA.reduce((sum, a) => sum + a * a, 0));
     const magnitudeB = Math.sqrt(vecB.reduce((sum, b) => sum + b * b, 0));
